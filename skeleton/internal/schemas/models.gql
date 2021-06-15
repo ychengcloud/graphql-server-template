@@ -1,0 +1,9 @@
+type CurrentUser {
+    name: String!
+    permissions: [Permission]
+}
+
+type Permission {
+    code: String!
+    name: String!
+}

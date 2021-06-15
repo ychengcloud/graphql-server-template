@@ -1,0 +1,123 @@
+package handlers
+
+import (
+	"html/template"
+	"io/fs"
+	"net/http"
+	"path/filepath"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
+	"github.com/99designs/gqlgen/graphql/handler"
+	"{{ .Extra.pkgpath }}/graphql"
+	gql "{{ .Extra.pkgpath }}/internal/generated"
+	gensvc "{{ .Extra.pkgpath }}/internal/generated/services"
+	"{{ .Extra.pkgpath }}/internal/middleware"
+	"{{ .Extra.pkgpath }}/internal/models"
+	"{{ .Extra.pkgpath }}/internal/resolvers"
+	"{{ .Extra.pkgpath }}/internal/services"
+	th "{{ .Extra.pkgpath }}/pkg/transports/http"
+	"{{ .Extra.pkgpath }}/pkg/validator"
+)
+
+// GraphqlHandler defines the GQLGen GraphQL server handler
+func GraphqlHandler(
+	db *gorm.DB, 
+	v *validator.Validator,
+	CurrentService services.CurrentService,
+{{- range .Tables}}
+	{{.NameCamel}}Service gensvc.{{.NameCamel}}Service,
+{{- end}}
+	) gin.HandlerFunc {
+	// NewExecutableSchema and Config are in the generated.go file
+	c := gql.Config{
+		Resolvers: &resolvers.Resolver{
+			CurrentService: CurrentService,
+			{{- range .Tables}}
+			{{.NameCamel}}Service:   {{.NameCamel}}Service,
+			{{- end}}
+		},
+	}
+
+	h := handler.NewDefaultServer(gql.NewExecutableSchema(c))
+
+	return func(c *gin.Context) {
+		h.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
+
+var page = template.Must(template.New("graphiql.html").Delims("[[", "]]").ParseFS(assets.GraphiqlTmpl, "index/graphiql.html"))
+
+// var page = template.Must(template.New("graphiql").Parse())
+
+func playgroundHandler(title string, endpoint string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/html")
+		err := page.Execute(w, map[string]string{
+			"title":    title,
+			"endpoint": endpoint,
+		})
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+// PlaygroundHandler defines a handler to expose the Playground
+func PlaygroundHandler(path string) gin.HandlerFunc {
+	h := playgroundHandler("Go GraphQL Server", path)
+	return func(c *gin.Context) {
+		h.ServeHTTP(c.Writer, c.Request)
+	}
+}
+
+type Options struct {
+	GraphQLPath         string
+	IsPlaygroundEnabled bool
+	PlaygroundPath      string
+}
+
+func CreateGqlHandlers(
+	o *Options,
+	logger *zap.Logger,
+	db *gorm.DB,
+	v *validator.Validator,
+	svcOpts *models.ServiceOptions,
+	authOpts *middleware.Options,
+	auth middleware.Auth,
+	CurrentService services.CurrentService,
+{{- range .Tables}}
+	{{.NameCamel}}Service gensvc.{{.NameCamel}}Service,
+{{- end}}
+) th.InitHandlers {
+	return func(r *gin.Engine) {
+		sub, err := fs.Sub(assets.Assets, "assets")
+		if err != nil {
+			logger.Fatal("Can't find assets", zap.String("err:", err.Error()))
+		}
+
+		r.StaticFS("/assets", http.FS(sub))
+
+		apiv1 := r.Group("/api")
+		if !authOpts.Skip {
+			apiv1.Use(middleware.AuthMiddleware(auth, svcOpts))
+		}
+		apiv1.Use(middleware.GinContextToContextMiddleware())
+		apiv1.POST(o.GraphQLPath, GraphqlHandler(
+			db, v,
+			CurrentService,
+{{- range .Tables}}
+			{{.NameCamel}}Service,
+{{- end}}
+		))
+		logger.Info("GraphQL @ ", zap.String("graphql path", o.GraphQLPath))
+		// Playground handler
+		if o.IsPlaygroundEnabled {
+			logger.Info("GraphQL Playground @ ", zap.String("graphql path", r.BasePath()+o.PlaygroundPath))
+			apiv1.GET(o.PlaygroundPath, PlaygroundHandler(filepath.Join(apiv1.BasePath(), o.GraphQLPath)))
+		}
+	}
+}

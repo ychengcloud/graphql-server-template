@@ -1,0 +1,108 @@
+query {
+  posts( orderBy:{direction: DESC, field: TITLE}) {
+    edges {
+      node {
+        id
+        title
+        children {
+          id
+          title
+          children {
+            id
+            title
+          }
+        }
+        comments {
+          id
+          content
+        }
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+    }
+    totalCount
+  }
+}
+
+
+query {
+  posts(filter:{
+    AND: [{id:{Eq: 1}}, {id:{In:[1,2]}}]
+  }, orderBy:{direction: DESC, field: TITLE}, first: 1) {
+    edges {
+      node {
+        id
+        title
+        children {
+          id
+          title
+          children {
+            id
+            title
+          }
+        }
+        comments {
+          id
+          content
+        }
+      }
+      cursor
+    }
+    pageInfo {
+      hasNextPage
+    }
+    totalCount
+  }
+}
+
+query {
+  comments {
+    edges {
+      node {
+        id
+        content
+      }
+    }
+  }
+}
+
+mutation($input: PostCreateInput) {
+  postCreate(input: $input) {
+    post {
+      id
+      title
+      content
+    }
+  }
+}
+
+{
+  "input": {
+    "parentId": 4,
+    "title": "title5",
+    "content": "content5",
+    "comments":[
+      {
+        "content": "content6",
+      },
+    ]
+  }
+}
+
+mutation ($input: CommentInput!) {
+  commentCreate(input: $input) {
+    comment {
+      id
+      content
+    }
+  }
+}
+
+{
+  "input": {
+    "postId": 1,
+    "content": "content2"
+  }
+}

@@ -1,0 +1,78 @@
+package database
+
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+
+	"{{ .Extra.pkgpath }}/internal/generated/models"
+)
+
+// Options is  configuration of database
+type Options struct {
+	Dialect     string `yaml:"dialect"`
+	AutoMigrate bool   `yaml:"autoMigrate"`
+	Debug       bool
+
+	MysqlOptions  *MysqlOptions  `yaml:"mysql" mapstructure:"mysql"`
+	SqliteOptions *SqliteOptions `yaml:"sqlite" mapstructure:"sqlite"`
+}
+
+type MysqlOptions struct {
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Name     string `yaml:"name"`
+	Charset  string `yaml:"charset"`
+}
+
+type SqliteOptions struct {
+	Name string `yaml:"name"`
+}
+
+func UpdateID(db *gorm.DB) {
+	field := db.Statement.Schema.PrioritizedPrimaryField
+	if field != nil {
+		field.Set(db.Statement.ReflectValue, uuid.New())
+	}
+}
+
+// Init 初始化数据库
+func New(o *Options) (*gorm.DB, error) {
+	var err error
+	var dialector gorm.Dialector
+	switch o.Dialect {
+	case "mysql":
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local", o.MysqlOptions.User, o.MysqlOptions.Password, o.MysqlOptions.Host, o.MysqlOptions.Port, o.MysqlOptions.Name, o.MysqlOptions.Charset)
+		dialector = mysql.Open(dsn)
+	case "sqlite":
+		dialector = sqlite.Open(o.SqliteOptions.Name)
+	default:
+		return nil, errors.Wrap(err, "dialect error")
+
+	}
+
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		return nil, errors.Wrap(err, "gorm open database connection error")
+	}
+
+	if o.Debug {
+		db = db.Debug()
+	}
+
+	// gorm:create 之前
+	db.Callback().Create().Before("gorm:create").Register("update_id", UpdateID)
+
+	if o.AutoMigrate {
+		{{- range .Tables}}
+			db.AutoMigrate(&models.{{.NameCamel}}{})
+		{{- end}}
+	}
+	return db, nil
+}

@@ -1,0 +1,48 @@
+// +build wireinject
+
+package main
+
+import (
+	"github.com/google/wire"
+
+	server "{{ .Extra.pkgpath }}/internal"
+	"{{ .Extra.pkgpath }}/internal/database"
+	"{{ .Extra.pkgpath }}/internal/handlers"
+	"{{ .Extra.pkgpath }}/pkg/app"
+	"{{ .Extra.pkgpath }}/pkg/config"
+	"{{ .Extra.pkgpath }}/pkg/log"
+	"{{ .Extra.pkgpath }}/pkg/transports/http"
+	"{{ .Extra.pkgpath }}/pkg/validator"
+
+	gensvc "{{ .Extra.pkgpath }}/internal/generated/services"
+	"{{ .Extra.pkgpath }}/internal/services"
+)
+
+var providerSet = wire.NewSet(
+	NewHttpOptions,
+	NewServerOptions,
+	NewHandlersOptions,
+	NewLogOptions,
+	NewDatabaseOptions,
+	NewSerivceOptions,
+	NewAuthOptions,
+	NewAuth,
+	log.New,
+	config.New,
+	// jaeger.New, jaeger.NewConfiguration,
+	database.New,
+	validator.New,
+	http.New, http.NewRouter,
+	handlers.CreateGqlHandlers,
+	server.NewServer,
+	services.NewDefaultCurrentService,
+	wire.Bind(new(services.CurrentService), new(*services.DefaultCurrentSerivce)),
+{{- range .Tables}}
+	gensvc.New{{.NameCamel}}GormService,
+	wire.Bind(new(gensvc.{{.NameCamel}}Service), new(*gensvc.{{.NameCamel}}GormService)),
+{{- end}}
+)
+
+func CreateApp(cf string) (*app.Application, error) {
+	panic(wire.Build(providerSet))
+}
