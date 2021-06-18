@@ -112,6 +112,10 @@ func NewAuthOptions(v *viper.Viper) (*middleware.Options, error) {
 }
 
 func NewAuth(authOpts *middleware.Options, opts *models.ServiceOptions) (middleware.Auth, error) {
+	if authOpts.Skip {
+		return nil, nil
+	}
+	
 	switch authOpts.AuthType {
 	case "kratos":
 		return middleware.NewAuthKratos(opts), nil

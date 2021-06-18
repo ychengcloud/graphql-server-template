@@ -1,6 +1,6 @@
 ## 特性
 
-- 生成符合 Golang 设计哲学的工程框架，包括基础功能(JWT, OpenTracing, ZapLog, Promtheus), 参见模板 [graphql-golang-server]()
+- 符合 Golang 设计哲学的工程框架，包括基础功能(JWT, OpenTracing, ZapLog, Promtheus), 参见模板 [graphql-golang-server]()
 - 支持查询过滤、排序、分页、指定返回字段、批量查询、批量更新、批量删除
 - 依赖注入
 - 根据数据库生成对应 CRUD 方法
